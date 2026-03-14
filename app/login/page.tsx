@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 import { Building2, Lock, Mail } from 'lucide-react';
 
 export default function LoginPage() {
@@ -9,20 +8,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
-  const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError('Неверный email или пароль');
+    try {
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) {
+        setError('Ошибка: ' + authError.message);
+        setLoading(false);
+        return;
+      }
+      if (data?.session) {
+        window.location.replace('/dashboard');
+      }
+    } catch (err: any) {
+      setError('Ошибка: ' + err.message);
       setLoading(false);
-    } else {
-      router.push('/dashboard');
-      router.refresh();
     }
   };
 
@@ -36,13 +40,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-slate-800">GroundFloor</h1>
           <p className="text-slate-500 text-sm mt-1">Управление коммерческой недвижимостью</p>
         </div>
-
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="label">Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <input type="email" className="input pl-10" placeholder="admin@example.com"
+              <input type="email" className="input pl-10" placeholder="admin@groundfloor.uz"
                 value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
           </div>
@@ -54,7 +57,7 @@ export default function LoginPage() {
                 value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
           </div>
-          {error && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          {error && <div className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
           <button type="submit" className="btn-primary w-full justify-center py-3" disabled={loading}>
             {loading ? 'Вход...' : 'Войти'}
           </button>
