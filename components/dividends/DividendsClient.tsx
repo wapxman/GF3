@@ -16,6 +16,7 @@ export default function DividendsClient() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
+  const [calcError, setCalcError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -43,39 +44,66 @@ export default function DividendsClient() {
 
   const calculate = async () => {
     setCalculating(true);
-    const supabase = createClient();
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+    setCalcError('');
+    try {
+      const supabase = createClient();
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
-    const monthIncome = income.filter((i: any) => i.income_date >= startDate && i.income_date <= endDate);
-    const monthExpenses = expenses.filter((e: any) => e.expense_date >= startDate && e.expense_date <= endDate);
+      // Берём свежие данные напрямую из БД
+      const [{ data: freshIncome }, { data: freshExpenses }, { data: freshShares }, { data: freshProps }] = await Promise.all([
+        supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
+        supabase.from('expenses').select('*').eq('is_deleted', false).gte('expense_date', startDate).lte('expense_date', endDate),
+        supabase.from('property_shares').select('*').is('valid_to', null),
+        supabase.from('properties').select('*').eq('status', 'active'),
+      ]);
 
-    const toInsert: any[] = [];
-    for (const property of properties) {
-      const propIncome = monthIncome.filter((i: any) => i.property_id === property.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
-      const propExpenses = monthExpenses.filter((e: any) => e.property_id === property.id).reduce((s: number, e: any) => s + Number(e.amount), 0);
-      const netProfit = propIncome - propExpenses;
-      const propShares = shares.filter((s: any) => s.property_id === property.id);
-      for (const share of propShares) {
-        toInsert.push({
-          period_year: year, period_month: month,
-          property_id: property.id, owner_id: share.owner_id,
-          net_profit: netProfit, share_percent: share.share_percent,
-          dividend_amount: (netProfit * share.share_percent) / 100,
-          calculated_by: profile?.id,
-        });
+      const toInsert: any[] = [];
+      for (const property of (freshProps || [])) {
+        const propIncome = (freshIncome || []).filter((i: any) => i.property_id === property.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
+        const propExpenses = (freshExpenses || []).filter((e: any) => e.property_id === property.id).reduce((s: number, e: any) => s + Number(e.amount), 0);
+        const netProfit = propIncome - propExpenses;
+        const propShares = (freshShares || []).filter((s: any) => s.property_id === property.id);
+        for (const share of propShares) {
+          toInsert.push({
+            period_year: year,
+            period_month: month,
+            property_id: property.id,
+            owner_id: share.owner_id,
+            net_profit: netProfit,
+            share_percent: share.share_percent,
+            dividend_amount: (netProfit * Number(share.share_percent)) / 100,
+            calculated_by: profile?.id,
+          });
+        }
       }
+
+      if (toInsert.length === 0) {
+        setCalcError('Нет данных для расчёта. Проверьте: есть ли активные объекты с долями владельцев?');
+        setCalculating(false);
+        return;
+      }
+
+      // Удаляем старые расчёты за этот период
+      await supabase.from('dividend_calculations').delete()
+        .eq('period_year', year).eq('period_month', month);
+
+      // Вставляем новые
+      const { data, error } = await supabase.from('dividend_calculations')
+        .insert(toInsert)
+        .select('*, properties(name, buildings(name)), profiles(full_name)');
+
+      if (error) {
+        setCalcError('Ошибка: ' + error.message);
+      } else {
+        setDividends([
+          ...(data || []),
+          ...dividends.filter((d: any) => !(d.period_year === year && d.period_month === month))
+        ]);
+      }
+    } catch (err: any) {
+      setCalcError('Ошибка: ' + err.message);
     }
-
-    await supabase.from('dividend_calculations').delete().eq('period_year', year).eq('period_month', month);
-    const { data } = await supabase.from('dividend_calculations')
-      .insert(toInsert)
-      .select('*, properties(name, buildings(name)), profiles(full_name)');
-
-    setDividends([
-      ...(data || []),
-      ...dividends.filter((d: any) => !(d.period_year === year && d.period_month === month))
-    ]);
     setCalculating(false);
   };
 
@@ -134,6 +162,10 @@ export default function DividendsClient() {
           </div>
         )}
       </div>
+
+      {calcError && (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-6 text-sm">{calcError}</div>
+      )}
 
       <div className="card p-0 overflow-hidden">
         <table className="w-full">
