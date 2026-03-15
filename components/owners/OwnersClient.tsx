@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, UserPlus, Pencil, Trash2, X } from 'lucide-react';
 
-export default function OwnersClient({ owners: initialOwners, properties, shares: initialShares }: any) {
+export default function OwnersClient({ owners: initialOwners, properties, shares: initialShares, currentUserRole }: any) {
   const [owners, setOwners] = useState(initialOwners);
   const [shares, setShares] = useState(initialShares);
   const [showShareForm, setShowShareForm] = useState(false);
@@ -21,13 +21,16 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
     setOError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setOError('Нет активной сессии'); setLoading(false); return; }
+
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-owner`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           },
           body: JSON.stringify({
             full_name: oForm.full_name,
@@ -37,9 +40,10 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
           }),
         }
       );
+
       const json = await res.json();
       if (!res.ok) {
-        setOError(json.error || 'Ошибка создания');
+        setOError(json.error || `Ошибка ${res.status}`);
         setLoading(false);
         return;
       }
@@ -95,19 +99,22 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
   };
 
   const ownerShares = owners.map((o: any) => ({ ...o, shares: shares.filter((s: any) => s.owner_id === o.id) }));
+  const isAdmin = currentUserRole === 'admin';
 
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold text-slate-800">Владельцы и доли</h1>
-        <div className="flex gap-3">
-          <button className="btn-secondary" onClick={() => setShowOwnerForm(true)}>
-            <UserPlus className="w-4 h-4" /> Добавить владельца
-          </button>
-          <button className="btn-primary" onClick={() => { setEditingShare(null); setSForm({ owner_id: '', property_id: '', share_percent: '', valid_from: new Date().toISOString().split('T')[0] }); setShowShareForm(true); }}>
-            <Plus className="w-4 h-4" /> Добавить долю
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex gap-3">
+            <button className="btn-secondary" onClick={() => setShowOwnerForm(true)}>
+              <UserPlus className="w-4 h-4" /> Добавить владельца
+            </button>
+            <button className="btn-primary" onClick={() => { setEditingShare(null); setSForm({ owner_id: '', property_id: '', share_percent: '', valid_from: new Date().toISOString().split('T')[0] }); setShowShareForm(true); }}>
+              <Plus className="w-4 h-4" /> Добавить долю
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Форма владельца */}
@@ -208,7 +215,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
                   <p className="text-sm text-slate-400">{o.role === 'admin' ? 'Администратор' : 'Владелец'}</p>
                 </div>
               </div>
-              {o.role !== 'admin' && (
+              {isAdmin && o.role !== 'admin' && (
                 <button onClick={() => handleDeleteOwner(o.id)} className="p-2 hover:text-red-600 hover:bg-red-50 rounded-lg text-slate-400">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -221,12 +228,16 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
                     <span className="text-sm text-slate-700">{s.properties?.buildings?.name} — {s.properties?.name}</span>
                     <div className="flex items-center gap-2">
                       <span className="badge-success">{s.share_percent}%</span>
-                      <button onClick={() => openEditShare(s)} className="p-1 hover:text-blue-600 text-slate-400">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => handleDeleteShare(s.id)} className="p-1 hover:text-red-600 text-slate-400">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button onClick={() => openEditShare(s)} className="p-1 hover:text-blue-600 text-slate-400">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDeleteShare(s.id)} className="p-1 hover:text-red-600 text-slate-400">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
