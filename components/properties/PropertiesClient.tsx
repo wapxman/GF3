@@ -1,8 +1,16 @@
 'use client';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Pencil, Archive, Building2, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Archive, Building2, Trash2, ArchiveRestore } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+
+const COL = {
+  building: { width: '25%', textAlign: 'left'   as const },
+  office:   { width: '25%', textAlign: 'left'   as const },
+  plan:     { width: '20%', textAlign: 'right'  as const },
+  status:   { width: '15%', textAlign: 'center' as const },
+  actions:  { width: '15%', textAlign: 'right'  as const },
+};
 
 export default function PropertiesClient({ buildings: initialBuildings, properties: initialProperties }: any) {
   const [buildings, setBuildings] = useState(initialBuildings);
@@ -125,7 +133,8 @@ export default function PropertiesClient({ buildings: initialBuildings, properti
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold mb-4">{editingProperty ? 'Редактировать офис' : 'Новый офис'}</h2>
             <form onSubmit={handleSaveProperty} className="space-y-4">
-              <div><label className="label">Здание</label>
+              <div>
+                <label className="label">Здание</label>
                 <select className="input" value={pForm.building_id} onChange={e => setPForm({...pForm, building_id: e.target.value})} required>
                   <option value="">Выберите здание</option>
                   {buildings.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -144,32 +153,45 @@ export default function PropertiesClient({ buildings: initialBuildings, properti
 
       {/* Таблица офисов */}
       <div className="card p-0 overflow-hidden">
-        <table className="w-full">
-          <thead><tr>
-            <th className="table-header">Здание</th>
-            <th className="table-header">Офис</th>
-            <th className="table-header text-right">План дохода</th>
-            <th className="table-header text-center">Статус</th>
-            <th className="table-header"></th>
-          </tr></thead>
+        <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr className="bg-slate-50">
+              <th className="table-header" style={COL.building}>Здание</th>
+              <th className="table-header" style={COL.office}>Офис</th>
+              <th className="table-header" style={COL.plan}>План дохода</th>
+              <th className="table-header" style={COL.status}>Статус</th>
+              <th className="table-header" style={COL.actions}></th>
+            </tr>
+          </thead>
           <tbody>
-            {properties.length === 0 && <tr><td colSpan={5} className="table-cell text-center text-slate-400 py-8">Нет офисов</td></tr>}
+            {properties.length === 0 && (
+              <tr><td colSpan={5} className="table-cell text-center text-slate-400 py-8">Нет офисов</td></tr>
+            )}
             {properties.map((p: any) => (
               <tr key={p.id} className="hover:bg-slate-50">
-                <td className="table-cell">{p.buildings?.name}</td>
-                <td className="table-cell font-medium">{p.name}</td>
-                <td className="table-cell text-right">{formatCurrency(p.planned_income)}</td>
-                <td className="table-cell text-center">
-                  {p.status === 'active' ? <span className="badge-success">Активен</span> : <span className="badge-warning">Архив</span>}
+                <td className="table-cell" style={COL.building}>{p.buildings?.name}</td>
+                <td className="table-cell font-medium" style={COL.office}>{p.name}</td>
+                <td className="table-cell" style={COL.plan}>{formatCurrency(p.planned_income)}</td>
+                <td className="table-cell" style={COL.status}>
+                  {p.status === 'active'
+                    ? <span className="badge-success">Активен</span>
+                    : <span className="badge-warning">Архив</span>}
                 </td>
-                <td className="table-cell">
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditingProperty(p); setPForm({ building_id: p.building_id, name: p.name, planned_income: String(p.planned_income) }); setShowPropertyForm(true); }} className="p-1 hover:text-blue-600">
+                <td className="table-cell" style={COL.actions}>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => { setEditingProperty(p); setPForm({ building_id: p.building_id, name: p.name, planned_income: String(p.planned_income) }); setShowPropertyForm(true); }}
+                      className="p-1.5 hover:text-blue-600 hover:bg-blue-50 rounded"
+                    >
                       <Pencil className="w-4 h-4" />
                     </button>
                     {p.status === 'active'
-                      ? <button onClick={() => handleArchive(p.id)} className="p-1 hover:text-orange-600"><Archive className="w-4 h-4" /></button>
-                      : <button onClick={() => handleUnarchive(p.id)} className="p-1 hover:text-green-600 text-xs">Активир</button>
+                      ? <button onClick={() => handleArchive(p.id)} className="p-1.5 hover:text-orange-600 hover:bg-orange-50 rounded" title="Архивировать">
+                          <Archive className="w-4 h-4" />
+                        </button>
+                      : <button onClick={() => handleUnarchive(p.id)} className="p-1.5 hover:text-green-600 hover:bg-green-50 rounded" title="Активировать">
+                          <ArchiveRestore className="w-4 h-4" />
+                        </button>
                     }
                   </div>
                 </td>
