@@ -45,27 +45,29 @@ export default function ExpensesClient({ properties, buildings, categories, expe
   const total = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="page-content">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Расходы</h1>
-          <p className="text-slate-500">Итого: <span className="font-semibold text-red-600">{formatCurrency(total)}</span></p>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">Расходы</h1>
+          <p className="text-slate-500 text-sm">Итого: <span className="font-semibold text-red-600">{formatCurrency(total)}</span></p>
         </div>
         <button className="btn-primary" onClick={() => { setShowForm(true); setEditing(null); }}>
-          <Plus className="w-4 h-4" /> Добавить расход
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Добавить расход</span>
+          <span className="sm:hidden">Добавить</span>
         </button>
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-slate-800 mb-4">{editing ? 'Редактировать' : 'Новый расход'}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="label">Привязка</label>
                 <div className="flex gap-3 mb-2">
                   <label className="flex items-center gap-2 text-sm"><input type="radio" value="property" checked={form.type === 'property'} onChange={e => setForm({...form, type: e.target.value})} /> Офис</label>
-                  <label className="flex items-center gap-2 text-sm"><input type="radio" value="building" checked={form.type === 'building'} onChange={e => setForm({...form, type: e.target.value})} /> Здание (распределить поровну)</label>
+                  <label className="flex items-center gap-2 text-sm"><input type="radio" value="building" checked={form.type === 'building'} onChange={e => setForm({...form, type: e.target.value})} /> Здание</label>
                 </div>
                 {form.type === 'property'
                   ? <select className="input" value={form.property_id} onChange={e => setForm({...form, property_id: e.target.value})} required>
@@ -106,7 +108,31 @@ export default function ExpensesClient({ properties, buildings, categories, expe
         </div>
       )}
 
-      <div className="card p-0 overflow-hidden">
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {expenses.length === 0 && <p className="text-center text-slate-400 py-8">Нет записей</p>}
+        {expenses.map((item: any) => (
+          <div key={item.id} className="card flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate">{item.expense_categories?.name}</p>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
+                {item.property_id ? `${item.properties?.buildings?.name} — ${item.properties?.name}` : `${item.buildings?.name} (здание)`}
+              </p>
+              <p className="text-xs text-slate-400">{formatDate(item.expense_date)}</p>
+            </div>
+            <div className="flex items-center gap-2 ml-3">
+              <span className="text-sm font-bold text-red-600 whitespace-nowrap">{formatCurrency(item.amount)}</span>
+              <div className="flex gap-1">
+                <button onClick={() => handleEdit(item)} className="p-1.5 hover:text-blue-600 rounded"><Pencil className="w-3.5 h-3.5" /></button>
+                <button onClick={() => handleDelete(item.id)} className="p-1.5 hover:text-red-600 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block card p-0 overflow-hidden">
         <table className="w-full">
           <thead><tr>
             <th className="table-header">Дата</th>

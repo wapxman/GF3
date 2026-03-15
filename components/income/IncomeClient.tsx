@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Pencil, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate, MONTHS } from '@/lib/utils';
 
 export default function IncomeClient({ properties, income: initialIncome }: { properties: any[], income: any[] }) {
@@ -23,8 +23,7 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
       const { data } = await supabase.from('income').insert(payload).select('*, properties(name, buildings(name))').single();
       setIncome([data, ...income]);
     }
-    setShowForm(false);
-    setEditing(null);
+    setShowForm(false); setEditing(null);
     setForm({ property_id: '', amount: '', income_date: '', comment: '' });
     setLoading(false);
   };
@@ -44,20 +43,22 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
   const total = income.reduce((s, i) => s + Number(i.amount), 0);
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="page-content">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Доходы</h1>
-          <p className="text-slate-500">Итого: <span className="font-semibold text-green-600">{formatCurrency(total)}</span></p>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">Доходы</h1>
+          <p className="text-slate-500 text-sm">Итого: <span className="font-semibold text-green-600">{formatCurrency(total)}</span></p>
         </div>
         <button className="btn-primary" onClick={() => { setShowForm(true); setEditing(null); setForm({ property_id: '', amount: '', income_date: '', comment: '' }); }}>
-          <Plus className="w-4 h-4" /> Добавить доход
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Добавить доход</span>
+          <span className="sm:hidden">Добавить</span>
         </button>
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md">
             <h2 className="text-lg font-bold text-slate-800 mb-4">{editing ? 'Редактировать доход' : 'Новый доход'}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -88,7 +89,29 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
         </div>
       )}
 
-      <div className="card p-0 overflow-hidden">
+      {/* Mobile: card list */}
+      <div className="md:hidden space-y-3">
+        {income.length === 0 && <p className="text-center text-slate-400 py-8">Нет записей</p>}
+        {income.map(item => (
+          <div key={item.id} className="card flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">{item.properties?.buildings?.name} — {item.properties?.name}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{formatDate(item.income_date)}</p>
+              {item.comment && <p className="text-xs text-slate-400">{item.comment}</p>}
+            </div>
+            <div className="flex items-center gap-3 ml-4">
+              <span className="text-sm font-bold text-green-600 whitespace-nowrap">{formatCurrency(item.amount)}</span>
+              <div className="flex gap-1">
+                <button onClick={() => handleEdit(item)} className="p-1.5 hover:text-blue-600 rounded"><Pencil className="w-3.5 h-3.5" /></button>
+                <button onClick={() => handleDelete(item.id)} className="p-1.5 hover:text-red-600 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden md:block card p-0 overflow-hidden">
         <table className="w-full">
           <thead><tr>
             <th className="table-header">Дата</th>
