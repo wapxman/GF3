@@ -4,6 +4,15 @@ import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, MONTHS } from '@/lib/utils';
 import { Download } from 'lucide-react';
 
+const COL = {
+  obj:    { width: '30%', textAlign: 'left'   as const },
+  plan:   { width: '14%', textAlign: 'right'  as const },
+  fact:   { width: '14%', textAlign: 'right'  as const },
+  exp:    { width: '14%', textAlign: 'right'  as const },
+  profit: { width: '18%', textAlign: 'right'  as const },
+  pct:    { width: '10%', textAlign: 'center' as const },
+};
+
 export default function ReportsClient() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -34,22 +43,26 @@ export default function ReportsClient() {
   }, [year, month]);
 
   const rows = properties.map((p: any) => {
-    const propIncome = income.filter((i: any) => i.property_id === p.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
+    const propIncome   = income.filter((i: any) => i.property_id === p.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
     const propExpenses = expenses.filter((e: any) => e.property_id === p.id).reduce((s: number, e: any) => s + Number(e.amount), 0);
-    const netProfit = propIncome - propExpenses;
-    const planPercent = p.planned_income > 0 ? Math.round((propIncome / p.planned_income) * 100) : null;
+    const netProfit    = propIncome - propExpenses;
+    const planPercent  = p.planned_income > 0 ? Math.round((propIncome / p.planned_income) * 100) : null;
     return { ...p, propIncome, propExpenses, netProfit, planPercent };
   });
 
-  const totalIncome = rows.reduce((s: number, r: any) => s + r.propIncome, 0);
+  const totalIncome   = rows.reduce((s: number, r: any) => s + r.propIncome, 0);
   const totalExpenses = rows.reduce((s: number, r: any) => s + r.propExpenses, 0);
-  const totalProfit = totalIncome - totalExpenses;
+  const totalProfit   = totalIncome - totalExpenses;
 
   const exportExcel = async () => {
     const XLSX = (await import('xlsx')).default;
     const wsData = [
       ['Объект', 'План', 'Факт дохода', 'Расходы', 'Чистая прибыль', '% плана'],
-      ...rows.map((r: any) => [r.name, r.planned_income, r.propIncome, r.propExpenses, r.netProfit, r.planPercent ? `${r.planPercent}%` : '—']),
+      ...rows.map((r: any) => [
+        `${r.buildings?.name} — ${r.name}`,
+        r.planned_income, r.propIncome, r.propExpenses, r.netProfit,
+        r.planPercent != null ? `${r.planPercent}%` : '—',
+      ]),
       ['ИТОГО', '', totalIncome, totalExpenses, totalProfit, ''],
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -62,7 +75,7 @@ export default function ReportsClient() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">P&L Отчёт</h1>
+          <h1 className="text-2xl font-bold text-slate-800">P&amp;L Отчёт</h1>
           <p className="text-slate-500">{MONTHS[month - 1]} {year}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -72,7 +85,9 @@ export default function ReportsClient() {
           <select className="input w-auto" value={year} onChange={e => setYear(Number(e.target.value))}>
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <button className="btn-secondary" onClick={exportExcel}><Download className="w-4 h-4" /> Excel</button>
+          <button className="btn-secondary" onClick={exportExcel}>
+            <Download className="w-4 h-4" /> Excel
+          </button>
         </div>
       </div>
 
@@ -80,51 +95,59 @@ export default function ReportsClient() {
         <div className="text-center text-slate-400 py-12">Загрузка...</div>
       ) : (
         <div className="card p-0 overflow-hidden">
-          <table className="w-full table-fixed">
-            <colgroup>
-              <col className="w-[35%]" />
-              <col className="w-[13%]" />
-              <col className="w-[13%]" />
-              <col className="w-[13%]" />
-              <col className="w-[16%]" />
-              <col className="w-[10%]" />
-            </colgroup>
+          <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
             <thead>
               <tr className="bg-slate-50">
-                <th className="table-header text-left">Объект</th>
-                <th className="table-header text-right">План</th>
-                <th className="table-header text-right">Факт дохода</th>
-                <th className="table-header text-right">Расходы</th>
-                <th className="table-header text-right">Чистая прибыль</th>
-                <th className="table-header text-center">% плана</th>
+                <th className="table-header" style={COL.obj}>Объект</th>
+                <th className="table-header" style={COL.plan}>План</th>
+                <th className="table-header" style={COL.fact}>Факт дохода</th>
+                <th className="table-header" style={COL.exp}>Расходы</th>
+                <th className="table-header" style={COL.profit}>Чистая прибыль</th>
+                <th className="table-header" style={COL.pct}>% плана</th>
               </tr>
             </thead>
             <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="table-cell text-center text-slate-400 py-8">
+                    Нет данных за выбранный период
+                  </td>
+                </tr>
+              )}
               {rows.map((r: any) => (
                 <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50">
-                  <td className="table-cell font-medium">{r.buildings?.name} — {r.name}</td>
-                  <td className="table-cell text-right text-slate-500">{formatCurrency(r.planned_income)}</td>
-                  <td className="table-cell text-right text-green-600 font-semibold">{formatCurrency(r.propIncome)}</td>
-                  <td className="table-cell text-right text-red-500">{formatCurrency(r.propExpenses)}</td>
-                  <td className={`table-cell text-right font-bold ${r.netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{formatCurrency(r.netProfit)}</td>
-                  <td className="table-cell text-center">
-                    {r.planPercent !== null && (
-                      <span className={r.planPercent >= 100 ? 'badge-success' : 'badge-danger'}>{r.planPercent}%</span>
+                  <td className="table-cell font-medium" style={COL.obj}>
+                    {r.buildings?.name} — {r.name}
+                  </td>
+                  <td className="table-cell text-slate-500" style={COL.plan}>
+                    {formatCurrency(r.planned_income)}
+                  </td>
+                  <td className="table-cell font-semibold text-green-600" style={COL.fact}>
+                    {formatCurrency(r.propIncome)}
+                  </td>
+                  <td className="table-cell text-red-500" style={COL.exp}>
+                    {formatCurrency(r.propExpenses)}
+                  </td>
+                  <td className={`table-cell font-bold ${r.netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`} style={COL.profit}>
+                    {formatCurrency(r.netProfit)}
+                  </td>
+                  <td className="table-cell" style={COL.pct}>
+                    {r.planPercent != null && (
+                      <span className={r.planPercent >= 100 ? 'badge-success' : 'badge-danger'}>
+                        {r.planPercent}%
+                      </span>
                     )}
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={6} className="table-cell text-center text-slate-400 py-8">Нет данных за выбранный период</td></tr>
-              )}
               {rows.length > 0 && (
                 <tr className="bg-slate-100 font-bold">
-                  <td className="table-cell">ИТОГО</td>
-                  <td className="table-cell text-right">—</td>
-                  <td className="table-cell text-right text-green-600">{formatCurrency(totalIncome)}</td>
-                  <td className="table-cell text-right text-red-500">{formatCurrency(totalExpenses)}</td>
-                  <td className={`table-cell text-right ${totalProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{formatCurrency(totalProfit)}</td>
-                  <td className="table-cell"></td>
+                  <td className="table-cell" style={COL.obj}>ИТОГО</td>
+                  <td className="table-cell" style={COL.plan}>—</td>
+                  <td className="table-cell text-green-600" style={COL.fact}>{formatCurrency(totalIncome)}</td>
+                  <td className="table-cell text-red-500" style={COL.exp}>{formatCurrency(totalExpenses)}</td>
+                  <td className={`table-cell ${totalProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`} style={COL.profit}>{formatCurrency(totalProfit)}</td>
+                  <td className="table-cell" style={COL.pct}></td>
                 </tr>
               )}
             </tbody>
