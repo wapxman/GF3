@@ -50,9 +50,11 @@ export default function ReportsClient() {
     return { ...p, propIncome, propExpenses, netProfit, planPercent };
   });
 
+  const totalPlan     = rows.reduce((s: number, r: any) => s + Number(r.planned_income || 0), 0);
   const totalIncome   = rows.reduce((s: number, r: any) => s + r.propIncome, 0);
   const totalExpenses = rows.reduce((s: number, r: any) => s + r.propExpenses, 0);
   const totalProfit   = totalIncome - totalExpenses;
+  const totalPlanPct  = totalPlan > 0 ? Math.round((totalIncome / totalPlan) * 100) : null;
 
   const exportExcel = async () => {
     const XLSX = (await import('xlsx')).default;
@@ -63,7 +65,7 @@ export default function ReportsClient() {
         r.planned_income, r.propIncome, r.propExpenses, r.netProfit,
         r.planPercent != null ? `${r.planPercent}%` : '—',
       ]),
-      ['ИТОГО', '', totalIncome, totalExpenses, totalProfit, ''],
+      ['ИТОГО', totalPlan, totalIncome, totalExpenses, totalProfit, totalPlanPct != null ? `${totalPlanPct}%` : '—'],
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -143,11 +145,17 @@ export default function ReportsClient() {
               {rows.length > 0 && (
                 <tr className="bg-slate-100 font-bold">
                   <td className="table-cell" style={COL.obj}>ИТОГО</td>
-                  <td className="table-cell" style={COL.plan}>—</td>
+                  <td className="table-cell text-slate-600" style={COL.plan}>{formatCurrency(totalPlan)}</td>
                   <td className="table-cell text-green-600" style={COL.fact}>{formatCurrency(totalIncome)}</td>
                   <td className="table-cell text-red-500" style={COL.exp}>{formatCurrency(totalExpenses)}</td>
                   <td className={`table-cell ${totalProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`} style={COL.profit}>{formatCurrency(totalProfit)}</td>
-                  <td className="table-cell" style={COL.pct}></td>
+                  <td className="table-cell" style={COL.pct}>
+                    {totalPlanPct != null && (
+                      <span className={totalPlanPct >= 100 ? 'badge-success' : 'badge-danger'}>
+                        {totalPlanPct}%
+                      </span>
+                    )}
+                  </td>
                 </tr>
               )}
             </tbody>
