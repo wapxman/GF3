@@ -6,14 +6,15 @@ import { formatCurrency, MONTHS } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export default function DashboardPage() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
       const supabase = createClient();
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
@@ -27,9 +28,9 @@ export default function DashboardPage() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [year, month]);
 
-  if (loading) return <div className="p-8 text-slate-400">Загрузка...</div>;
+  if (!data) return <div className="p-8 text-slate-400">Загрузка...</div>;
 
   const { buildings, properties, income, expenses } = data;
   const totalIncome = income.reduce((s: number, i: any) => s + Number(i.amount), 0);
@@ -59,11 +60,20 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-slate-800">Дашборд</h1>
           <p className="text-slate-500">{MONTHS[month - 1]} {year}</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Building2 className="w-4 h-4" />
-          {buildings.length} зданий · {properties.length} объектов
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-500 mr-4">
+            <Building2 className="w-4 h-4" />
+            {buildings.length} зданий · {properties.length} объектов
+          </div>
+          <select className="input w-auto" value={month} onChange={e => setMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select className="input w-auto" value={year} onChange={e => setYear(Number(e.target.value))}>
+            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
         </div>
       </div>
+
       <div className="grid grid-cols-4 gap-4 mb-8">
         {stats.map(({ label, value, color, bg, icon: Icon }) => (
           <div key={label} className="card">
@@ -77,37 +87,42 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-6">
-        <div className="card">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Доходы и расходы по объектам</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={propertyStats}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: any) => formatCurrency(v)} />
-              <Legend />
-              <Bar dataKey="income" name="Доход" fill="#22c55e" radius={[4,4,0,0]} />
-              <Bar dataKey="expenses" name="Расход" fill="#ef4444" radius={[4,4,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="card">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Статус объектов</h2>
-          <div className="space-y-3">
-            {propertyStats.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Добавьте объекты в разделе "Объекты"</p>}
-            {propertyStats.map((p: any) => (
-              <div key={p.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <span className="text-sm font-medium text-slate-700">{p.name}</span>
-                <div className="text-right">
-                  <p className={`text-sm font-bold ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(p.profit)}</p>
-                  <p className="text-xs text-slate-400">{p.plan > 0 ? `${Math.round((p.income / p.plan) * 100)}% от плана` : ''}</p>
+
+      {loading ? (
+        <div className="text-center text-slate-400 py-12">Загрузка...</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-6">
+          <div className="card">
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">Доходы и расходы по объектам</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={propertyStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                <Legend />
+                <Bar dataKey="income" name="Доход" fill="#22c55e" radius={[4,4,0,0]} />
+                <Bar dataKey="expenses" name="Расход" fill="#ef4444" radius={[4,4,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="card">
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">Статус объектов</h2>
+            <div className="space-y-3">
+              {propertyStats.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Добавьте объекты в разделе "Объекты"</p>}
+              {propertyStats.map((p: any) => (
+                <div key={p.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <span className="text-sm font-medium text-slate-700">{p.name}</span>
+                  <div className="text-right">
+                    <p className={`text-sm font-bold ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(p.profit)}</p>
+                    <p className="text-xs text-slate-400">{p.plan > 0 ? `${Math.round((p.income / p.plan) * 100)}% от плана` : ''}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
