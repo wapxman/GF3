@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import PropertiesClient from '@/components/properties/PropertiesClient';
+import { createClient } from '@/lib/supabase/server';
 
 export default async function PropertiesPage() {
   const supabase = createClient();

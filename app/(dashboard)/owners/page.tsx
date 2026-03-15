@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import OwnersClient from '@/components/owners/OwnersClient';
+import { createClient } from '@/lib/supabase/server';
 
 export default async function OwnersPage() {
   const supabase = createClient();
