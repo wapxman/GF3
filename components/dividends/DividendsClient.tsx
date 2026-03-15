@@ -4,6 +4,26 @@ import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, MONTHS } from '@/lib/utils';
 import { Calculator, CheckCircle, Download } from 'lucide-react';
 
+const COL_ADMIN = {
+  owner:  { width: '16%', textAlign: 'left'   as const },
+  period: { width: '10%', textAlign: 'left'   as const },
+  obj:    { width: '18%', textAlign: 'left'   as const },
+  profit: { width: '14%', textAlign: 'right'  as const },
+  share:  { width: '7%',  textAlign: 'center' as const },
+  div:    { width: '14%', textAlign: 'right'  as const },
+  status: { width: '11%', textAlign: 'center' as const },
+  action: { width: '10%', textAlign: 'center' as const },
+};
+
+const COL_OWNER = {
+  period: { width: '14%', textAlign: 'left'   as const },
+  obj:    { width: '26%', textAlign: 'left'   as const },
+  profit: { width: '18%', textAlign: 'right'  as const },
+  share:  { width: '10%', textAlign: 'center' as const },
+  div:    { width: '18%', textAlign: 'right'  as const },
+  status: { width: '14%', textAlign: 'center' as const },
+};
+
 export default function DividendsClient() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -13,8 +33,6 @@ export default function DividendsClient() {
   const [shares, setShares] = useState<any[]>([]);
   const [dividends, setDividends] = useState<any[]>([]);
   const [owners, setOwners] = useState<any[]>([]);
-  const [income, setIncome] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState('');
@@ -24,21 +42,17 @@ export default function DividendsClient() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const [{ data: p }, { data: props }, { data: sh }, { data: div }, { data: inc }, { data: exp }, { data: ow }] = await Promise.all([
+      const [{ data: p }, { data: props }, { data: sh }, { data: div }, { data: ow }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('properties').select('*, buildings(name)').eq('status', 'active'),
         supabase.from('property_shares').select('*').is('valid_to', null),
         supabase.from('dividend_calculations').select('*, properties(name, buildings(name))').order('period_year', { ascending: false }).order('period_month', { ascending: false }),
-        supabase.from('income').select('*').eq('is_deleted', false),
-        supabase.from('expenses').select('*').eq('is_deleted', false),
         supabase.from('profiles').select('id, full_name'),
       ]);
       setProfile(p);
       setProperties(props || []);
       setShares(sh || []);
       setDividends(div || []);
-      setIncome(inc || []);
-      setExpenses(exp || []);
       setOwners(ow || []);
       setLoading(false);
     };
@@ -53,7 +67,8 @@ export default function DividendsClient() {
     try {
       const supabase = createClient();
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
       const [{ data: freshIncome }, { data: freshExpenses }, { data: freshShares }, { data: freshProps }] = await Promise.all([
         supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
@@ -64,7 +79,7 @@ export default function DividendsClient() {
 
       const toInsert: any[] = [];
       for (const property of (freshProps || [])) {
-        const propIncome = (freshIncome || []).filter((i: any) => i.property_id === property.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
+        const propIncome   = (freshIncome   || []).filter((i: any) => i.property_id === property.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
         const propExpenses = (freshExpenses || []).filter((e: any) => e.property_id === property.id).reduce((s: number, e: any) => s + Number(e.amount), 0);
         const netProfit = propIncome - propExpenses;
         const propShares = (freshShares || []).filter((s: any) => s.property_id === property.id);
@@ -115,7 +130,15 @@ export default function DividendsClient() {
     const XLSX = (await import('xlsx')).default;
     const wsData = [
       ['Владелец', 'Период', 'Объект', 'Чистая прибыль', 'Доля %', 'Дивиденд', 'Статус'],
-      ...filtered.map((d: any) => [getOwnerName(d.owner_id), `${MONTHS[d.period_month - 1]} ${d.period_year}`, d.properties?.name, d.net_profit, `${d.share_percent}%`, d.dividend_amount, d.is_paid ? 'Выплачено' : 'Ожидает']),
+      ...filtered.map((d: any) => [
+        getOwnerName(d.owner_id),
+        `${MONTHS[d.period_month - 1]} ${d.period_year}`,
+        d.properties?.name,
+        d.net_profit,
+        `${d.share_percent}%`,
+        d.dividend_amount,
+        d.is_paid ? 'Выплачено' : 'Ожидает',
+      ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -124,6 +147,8 @@ export default function DividendsClient() {
   };
 
   if (loading) return <div className="p-8 text-slate-400">Загрузка...</div>;
+
+  const C = isAdmin ? COL_ADMIN : COL_OWNER;
 
   return (
     <div className="p-8">
@@ -151,52 +176,48 @@ export default function DividendsClient() {
       {calcError && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-6 text-sm">{calcError}</div>}
 
       <div className="card p-0 overflow-hidden">
-        <table className="w-full table-fixed">
-          <colgroup>
-            {isAdmin && <col className="w-40" />}
-            <col className="w-28" />
-            <col className="w-40" />
-            <col className="w-36" />
-            <col className="w-20" />
-            <col className="w-36" />
-            <col className="w-28" />
-            {isAdmin && <col className="w-28" />}
-          </colgroup>
+        <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
           <thead>
             <tr className="bg-slate-50">
-              {isAdmin && <th className="table-header text-left">Владелец</th>}
-              <th className="table-header text-left">Период</th>
-              <th className="table-header text-left">Объект</th>
-              <th className="table-header text-right">Чистая прибыль</th>
-              <th className="table-header text-center">Доля</th>
-              <th className="table-header text-right">Дивиденд</th>
-              <th className="table-header text-center">Статус</th>
-              {isAdmin && <th className="table-header text-center">Действие</th>}
+              {isAdmin && <th className="table-header" style={(C as typeof COL_ADMIN).owner}>Владелец</th>}
+              <th className="table-header" style={C.period}>Период</th>
+              <th className="table-header" style={C.obj}>Объект</th>
+              <th className="table-header" style={C.profit}>Чистая прибыль</th>
+              <th className="table-header" style={C.share}>Доля</th>
+              <th className="table-header" style={C.div}>Дивиденд</th>
+              <th className="table-header" style={C.status}>Статус</th>
+              {isAdmin && <th className="table-header" style={(C as typeof COL_ADMIN).action}>Действие</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={isAdmin ? 8 : 6} className="table-cell text-center text-slate-400 py-8">
-                  {isAdmin ? 'Нажмите "Рассчитать дивиденды" для выбранного периода' : 'Нет данных'}
+                  {isAdmin ? 'Нажмите «Рассчитать дивиденды» для выбранного периода' : 'Нет данных'}
                 </td>
               </tr>
             )}
             {filtered.map((d: any) => (
               <tr key={d.id} className="hover:bg-slate-50 border-b border-slate-50">
-                {isAdmin && <td className="table-cell font-medium truncate">{getOwnerName(d.owner_id)}</td>}
-                <td className="table-cell">{MONTHS[d.period_month - 1]} {d.period_year}</td>
-                <td className="table-cell truncate">{d.properties?.buildings?.name} — {d.properties?.name}</td>
-                <td className="table-cell text-right">{formatCurrency(d.net_profit)}</td>
-                <td className="table-cell text-center font-medium">{d.share_percent}%</td>
-                <td className="table-cell text-right font-bold text-blue-600">{formatCurrency(d.dividend_amount)}</td>
-                <td className="table-cell text-center">
+                {isAdmin && (
+                  <td className="table-cell font-medium" style={(C as typeof COL_ADMIN).owner}>
+                    <span className="block truncate">{getOwnerName(d.owner_id)}</span>
+                  </td>
+                )}
+                <td className="table-cell" style={C.period}>{MONTHS[d.period_month - 1]} {d.period_year}</td>
+                <td className="table-cell" style={C.obj}>
+                  <span className="block truncate">{d.properties?.buildings?.name} — {d.properties?.name}</span>
+                </td>
+                <td className="table-cell" style={C.profit}>{formatCurrency(d.net_profit)}</td>
+                <td className="table-cell font-medium" style={C.share}>{d.share_percent}%</td>
+                <td className="table-cell font-bold text-blue-600" style={C.div}>{formatCurrency(d.dividend_amount)}</td>
+                <td className="table-cell" style={C.status}>
                   {d.is_paid
                     ? <span className="badge-success">Выплачено</span>
                     : <span className="badge-warning">Ожидает</span>}
                 </td>
                 {isAdmin && (
-                  <td className="table-cell text-center">
+                  <td className="table-cell" style={(C as typeof COL_ADMIN).action}>
                     {!d.is_paid && (
                       <button onClick={() => markPaid(d.id)} className="btn-secondary py-1 px-2 text-xs">
                         <CheckCircle className="w-3 h-3" /> Выплатить
