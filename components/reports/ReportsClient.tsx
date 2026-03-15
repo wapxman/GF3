@@ -18,7 +18,8 @@ export default function ReportsClient() {
       setLoading(true);
       const supabase = createClient();
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
       const [{ data: p }, { data: i }, { data: e }] = await Promise.all([
         supabase.from('properties').select('*, buildings(name)').order('name'),
         supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
@@ -79,7 +80,15 @@ export default function ReportsClient() {
         <div className="text-center text-slate-400 py-12">Загрузка...</div>
       ) : (
         <div className="card p-0 overflow-hidden">
-          <table className="w-full">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-[35%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[16%]" />
+              <col className="w-[10%]" />
+            </colgroup>
             <thead>
               <tr className="bg-slate-50">
                 <th className="table-header text-left">Объект</th>
