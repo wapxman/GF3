@@ -41,6 +41,23 @@ export default function LoginPage() {
           <p className="text-slate-500 text-sm mt-1">Управление коммерческой недвижимостью</p>
         </div>
 
+        <style>{`
+          input:-webkit-autofill,
+          input:-webkit-autofill:hover,
+          input:-webkit-autofill:focus {
+            -webkit-box-shadow: 0 0 0px 1000px #fff inset;
+            box-shadow: 0 0 0px 1000px #fff inset;
+            transition: background-color 5000s ease-in-out 0s;
+          }
+          input::-webkit-contacts-auto-fill-button,
+          input::-webkit-credentials-auto-fill-button {
+            visibility: hidden;
+            pointer-events: none;
+            position: absolute;
+            right: 0;
+          }
+        `}</style>
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="label">Email</label>
