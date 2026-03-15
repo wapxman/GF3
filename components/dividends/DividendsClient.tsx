@@ -12,6 +12,7 @@ export default function DividendsClient() {
   const [properties, setProperties] = useState<any[]>([]);
   const [shares, setShares] = useState<any[]>([]);
   const [dividends, setDividends] = useState<any[]>([]);
+  const [owners, setOwners] = useState<any[]>([]);
   const [income, setIncome] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,13 +24,14 @@ export default function DividendsClient() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const [{ data: p }, { data: props }, { data: sh }, { data: div }, { data: inc }, { data: exp }] = await Promise.all([
+      const [{ data: p }, { data: props }, { data: sh }, { data: div }, { data: inc }, { data: exp }, { data: ow }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('properties').select('*, buildings(name)').eq('status', 'active'),
-        supabase.from('property_shares').select('*, profiles(full_name), properties(name)').is('valid_to', null),
-        supabase.from('dividend_calculations').select('*, properties(name, buildings(name)), profiles(full_name)').order('period_year', { ascending: false }).order('period_month', { ascending: false }),
+        supabase.from('property_shares').select('*').is('valid_to', null),
+        supabase.from('dividend_calculations').select('*, properties(name, buildings(name))').order('period_year', { ascending: false }).order('period_month', { ascending: false }),
         supabase.from('income').select('*').eq('is_deleted', false),
         supabase.from('expenses').select('*').eq('is_deleted', false),
+        supabase.from('profiles').select('id, full_name'),
       ]);
       setProfile(p);
       setProperties(props || []);
@@ -37,10 +39,13 @@ export default function DividendsClient() {
       setDividends(div || []);
       setIncome(inc || []);
       setExpenses(exp || []);
+      setOwners(ow || []);
       setLoading(false);
     };
     load();
   }, []);
+
+  const getOwnerName = (ownerId: string) => owners.find(o => o.id === ownerId)?.full_name || '—';
 
   const calculate = async () => {
     setCalculating(true);
@@ -50,7 +55,6 @@ export default function DividendsClient() {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
-      // Берём свежие данные напрямую из БД
       const [{ data: freshIncome }, { data: freshExpenses }, { data: freshShares }, { data: freshProps }] = await Promise.all([
         supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
         supabase.from('expenses').select('*').eq('is_deleted', false).gte('expense_date', startDate).lte('expense_date', endDate),
@@ -84,14 +88,12 @@ export default function DividendsClient() {
         return;
       }
 
-      // Удаляем старые расчёты за этот период
       await supabase.from('dividend_calculations').delete()
         .eq('period_year', year).eq('period_month', month);
 
-      // Вставляем новые
       const { data, error } = await supabase.from('dividend_calculations')
         .insert(toInsert)
-        .select('*, properties(name, buildings(name)), profiles(full_name)');
+        .select('*, properties(name, buildings(name))');
 
       if (error) {
         setCalcError('Ошибка: ' + error.message);
@@ -113,12 +115,18 @@ export default function DividendsClient() {
     setDividends(dividends.map((d: any) => d.id === id ? { ...d, is_paid: true } : d));
   };
 
+  const isAdmin = profile?.role === 'admin';
+  const filtered = isAdmin
+    ? dividends.filter((d: any) => d.period_year === year && d.period_month === month)
+    : dividends.filter((d: any) => d.owner_id === profile?.id);
+  const totalDividends = filtered.reduce((s: number, d: any) => s + Number(d.dividend_amount), 0);
+
   const exportExcel = async () => {
     const XLSX = (await import('xlsx')).default;
     const wsData = [
       ['Владелец', 'Период', 'Объект', 'Чистая прибыль', 'Доля %', 'Дивиденд', 'Статус'],
       ...filtered.map((d: any) => [
-        d.profiles?.full_name,
+        getOwnerName(d.owner_id),
         `${MONTHS[d.period_month - 1]} ${d.period_year}`,
         d.properties?.name,
         d.net_profit, `${d.share_percent}%`,
@@ -131,12 +139,6 @@ export default function DividendsClient() {
     XLSX.utils.book_append_sheet(wb, ws, 'Дивиденды');
     XLSX.writeFile(wb, `Dividends_${year}_${month}.xlsx`);
   };
-
-  const isAdmin = profile?.role === 'admin';
-  const filtered = isAdmin
-    ? dividends.filter((d: any) => d.period_year === year && d.period_month === month)
-    : dividends.filter((d: any) => d.owner_id === profile?.id);
-  const totalDividends = filtered.reduce((s: number, d: any) => s + Number(d.dividend_amount), 0);
 
   if (loading) return <div className="p-8 text-slate-400">Загрузка...</div>;
 
@@ -189,7 +191,7 @@ export default function DividendsClient() {
             )}
             {filtered.map((d: any) => (
               <tr key={d.id} className="hover:bg-slate-50 border-b border-slate-50">
-                {isAdmin && <td className="table-cell font-medium">{d.profiles?.full_name}</td>}
+                {isAdmin && <td className="table-cell font-medium">{getOwnerName(d.owner_id)}</td>}
                 <td className="table-cell">{MONTHS[d.period_month - 1]} {d.period_year}</td>
                 <td className="table-cell">{d.properties?.buildings?.name} — {d.properties?.name}</td>
                 <td className="table-cell text-right">{formatCurrency(d.net_profit)}</td>
