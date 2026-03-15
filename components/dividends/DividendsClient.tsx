@@ -70,12 +70,9 @@ export default function DividendsClient() {
         const propShares = (freshShares || []).filter((s: any) => s.property_id === property.id);
         for (const share of propShares) {
           toInsert.push({
-            period_year: year,
-            period_month: month,
-            property_id: property.id,
-            owner_id: share.owner_id,
-            net_profit: netProfit,
-            share_percent: share.share_percent,
+            period_year: year, period_month: month,
+            property_id: property.id, owner_id: share.owner_id,
+            net_profit: netProfit, share_percent: share.share_percent,
             dividend_amount: (netProfit * Number(share.share_percent)) / 100,
             calculated_by: profile?.id,
           });
@@ -88,20 +85,13 @@ export default function DividendsClient() {
         return;
       }
 
-      await supabase.from('dividend_calculations').delete()
-        .eq('period_year', year).eq('period_month', month);
-
-      const { data, error } = await supabase.from('dividend_calculations')
-        .insert(toInsert)
-        .select('*, properties(name, buildings(name))');
+      await supabase.from('dividend_calculations').delete().eq('period_year', year).eq('period_month', month);
+      const { data, error } = await supabase.from('dividend_calculations').insert(toInsert).select('*, properties(name, buildings(name))');
 
       if (error) {
         setCalcError('Ошибка: ' + error.message);
       } else {
-        setDividends([
-          ...(data || []),
-          ...dividends.filter((d: any) => !(d.period_year === year && d.period_month === month))
-        ]);
+        setDividends([...(data || []), ...dividends.filter((d: any) => !(d.period_year === year && d.period_month === month))]);
       }
     } catch (err: any) {
       setCalcError('Ошибка: ' + err.message);
@@ -125,14 +115,7 @@ export default function DividendsClient() {
     const XLSX = (await import('xlsx')).default;
     const wsData = [
       ['Владелец', 'Период', 'Объект', 'Чистая прибыль', 'Доля %', 'Дивиденд', 'Статус'],
-      ...filtered.map((d: any) => [
-        getOwnerName(d.owner_id),
-        `${MONTHS[d.period_month - 1]} ${d.period_year}`,
-        d.properties?.name,
-        d.net_profit, `${d.share_percent}%`,
-        d.dividend_amount,
-        d.is_paid ? 'Выплачено' : 'Ожидает'
-      ]),
+      ...filtered.map((d: any) => [getOwnerName(d.owner_id), `${MONTHS[d.period_month - 1]} ${d.period_year}`, d.properties?.name, d.net_profit, `${d.share_percent}%`, d.dividend_amount, d.is_paid ? 'Выплачено' : 'Ожидает']),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -165,35 +148,45 @@ export default function DividendsClient() {
         )}
       </div>
 
-      {calcError && (
-        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-6 text-sm">{calcError}</div>
-      )}
+      {calcError && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-6 text-sm">{calcError}</div>}
 
       <div className="card p-0 overflow-hidden">
-        <table className="w-full">
+        <table className="w-full table-fixed">
+          <colgroup>
+            {isAdmin && <col className="w-40" />}
+            <col className="w-28" />
+            <col className="w-40" />
+            <col className="w-36" />
+            <col className="w-20" />
+            <col className="w-36" />
+            <col className="w-28" />
+            {isAdmin && <col className="w-28" />}
+          </colgroup>
           <thead>
             <tr className="bg-slate-50">
-              {isAdmin && <th className="table-header">Владелец</th>}
-              <th className="table-header">Период</th>
-              <th className="table-header">Объект</th>
+              {isAdmin && <th className="table-header text-left">Владелец</th>}
+              <th className="table-header text-left">Период</th>
+              <th className="table-header text-left">Объект</th>
               <th className="table-header text-right">Чистая прибыль</th>
               <th className="table-header text-center">Доля</th>
               <th className="table-header text-right">Дивиденд</th>
               <th className="table-header text-center">Статус</th>
-              {isAdmin && <th className="table-header"></th>}
+              {isAdmin && <th className="table-header text-center">Действие</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={isAdmin ? 8 : 6} className="table-cell text-center text-slate-400 py-8">
-                {isAdmin ? 'Нажмите "Рассчитать дивиденды" для выбранного периода' : 'Нет данных'}
-              </td></tr>
+              <tr>
+                <td colSpan={isAdmin ? 8 : 6} className="table-cell text-center text-slate-400 py-8">
+                  {isAdmin ? 'Нажмите "Рассчитать дивиденды" для выбранного периода' : 'Нет данных'}
+                </td>
+              </tr>
             )}
             {filtered.map((d: any) => (
               <tr key={d.id} className="hover:bg-slate-50 border-b border-slate-50">
-                {isAdmin && <td className="table-cell font-medium">{getOwnerName(d.owner_id)}</td>}
+                {isAdmin && <td className="table-cell font-medium truncate">{getOwnerName(d.owner_id)}</td>}
                 <td className="table-cell">{MONTHS[d.period_month - 1]} {d.period_year}</td>
-                <td className="table-cell">{d.properties?.buildings?.name} — {d.properties?.name}</td>
+                <td className="table-cell truncate">{d.properties?.buildings?.name} — {d.properties?.name}</td>
                 <td className="table-cell text-right">{formatCurrency(d.net_profit)}</td>
                 <td className="table-cell text-center font-medium">{d.share_percent}%</td>
                 <td className="table-cell text-right font-bold text-blue-600">{formatCurrency(d.dividend_amount)}</td>
@@ -203,7 +196,7 @@ export default function DividendsClient() {
                     : <span className="badge-warning">Ожидает</span>}
                 </td>
                 {isAdmin && (
-                  <td className="table-cell">
+                  <td className="table-cell text-center">
                     {!d.is_paid && (
                       <button onClick={() => markPaid(d.id)} className="btn-secondary py-1 px-2 text-xs">
                         <CheckCircle className="w-3 h-3" /> Выплатить
