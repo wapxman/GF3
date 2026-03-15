@@ -7,18 +7,18 @@ import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/types';
 
 const adminLinks = [
-  { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
-  { href: '/income', label: 'Доходы', icon: TrendingUp },
-  { href: '/expenses', label: 'Расходы', icon: TrendingDown },
-  { href: '/reports', label: 'P&L Отчёт', icon: BarChart3 },
-  { href: '/dividends', label: 'Дивиденды', icon: PieChart },
-  { href: '/owners', label: 'Владельцы', icon: Users },
-  { href: '/properties', label: 'Объекты', icon: Building2 },
-  { href: '/settings', label: 'Настройки', icon: Settings },
+  { href: '/dashboard', label: 'Дашборд',    icon: LayoutDashboard },
+  { href: '/income',    label: 'Доходы',     icon: TrendingUp },
+  { href: '/expenses',  label: 'Расходы',    icon: TrendingDown },
+  { href: '/reports',   label: 'P&L Отчёт', icon: BarChart3 },
+  { href: '/dividends', label: 'Дивиденды',  icon: PieChart },
+  { href: '/owners',    label: 'Владельцы',  icon: Users },
+  { href: '/properties',label: 'Объекты',    icon: Building2 },
+  { href: '/settings',  label: 'Настройки',  icon: Settings },
 ];
 
 const ownerLinks = [
-  { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Дашборд',       icon: LayoutDashboard },
   { href: '/dividends', label: 'Мои дивиденды', icon: PieChart },
 ];
 

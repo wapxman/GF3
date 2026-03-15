@@ -34,49 +34,52 @@ export default function DashboardClient({ profile, buildings, properties, income
   });
 
   const stats = [
-    { label: 'Доходы', value: formatCurrency(totalIncome), icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Расходы', value: formatCurrency(totalExpenses), icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Чистая прибыль', value: formatCurrency(netProfit), icon: DollarSign, color: netProfit >= 0 ? 'text-blue-600' : 'text-red-600', bg: netProfit >= 0 ? 'bg-blue-50' : 'bg-red-50' },
+    { label: 'Доходы',           value: formatCurrency(totalIncome),   icon: TrendingUp,   color: 'text-green-600',  bg: 'bg-green-50' },
+    { label: 'Расходы',          value: formatCurrency(totalExpenses), icon: TrendingDown, color: 'text-red-600',    bg: 'bg-red-50' },
+    { label: 'Чистая прибыль', value: formatCurrency(netProfit),     icon: DollarSign,   color: netProfit >= 0 ? 'text-blue-600' : 'text-red-600', bg: netProfit >= 0 ? 'bg-blue-50' : 'bg-red-50' },
     { label: 'Выполнение плана', value: `${planPercent}%`, icon: Target, color: planPercent >= 100 ? 'text-green-600' : 'text-orange-600', bg: planPercent >= 100 ? 'bg-green-50' : 'bg-orange-50' },
   ];
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="page-content">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Дашборд</h1>
-          <p className="text-slate-500">{MONTHS[month - 1]} {year}</p>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">Дашборд</h1>
+          <p className="text-slate-500 text-sm">{MONTHS[month - 1]} {year}</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <Building2 className="w-4 h-4" />
-          {buildings.length} зданий · {properties.length} объектов
+          <span className="hidden sm:inline">{buildings.length} зданий · </span>
+          {properties.length} объектов
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      {/* Stats grid — 2 columns on mobile, 4 on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {stats.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="card">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-slate-500">{label}</span>
-              <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center`}>
-                <Icon className={`w-4 h-4 ${color}`} />
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-500">{label}</span>
+              <div className={`w-7 h-7 ${bg} rounded-lg flex items-center justify-center`}>
+                <Icon className={`w-3.5 h-3.5 ${color}`} />
               </div>
             </div>
-            <p className={`text-xl font-bold ${color}`}>{value}</p>
+            <p className={`text-base md:text-xl font-bold ${color} truncate`}>{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-8">
+      {/* Charts — stacked on mobile, side-by-side on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card">
           <h2 className="text-sm font-semibold text-slate-700 mb-4">Доходы и расходы по объектам</h2>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={220}>
             <BarChart data={propertyStats}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v: any) => formatCurrency(v)} />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="income" name="Доход" fill="#22c55e" radius={[4,4,0,0]} />
               <Bar dataKey="expenses" name="Расход" fill="#ef4444" radius={[4,4,0,0]} />
             </BarChart>
@@ -85,16 +88,16 @@ export default function DashboardClient({ profile, buildings, properties, income
 
         <div className="card">
           <h2 className="text-sm font-semibold text-slate-700 mb-4">Статус объектов</h2>
-          <div className="space-y-3">
+          <div className="space-y-2 max-h-52 overflow-y-auto">
             {propertyStats.map((p) => (
-              <div key={p.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <span className="text-sm font-medium text-slate-700">{p.name}</span>
-                <div className="text-right">
-                  <p className={`text-sm font-bold ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <div key={p.name} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+                <span className="text-xs font-medium text-slate-700 truncate mr-2">{p.name}</span>
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-xs font-bold ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(p.profit)}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {p.plan > 0 ? `${Math.round((p.income / p.plan) * 100)}% от плана` : ''}
+                    {p.plan > 0 ? `${Math.round((p.income / p.plan) * 100)}%` : ''}
                   </p>
                 </div>
               </div>
