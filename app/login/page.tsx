@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Building2, Lock, Mail } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -40,25 +40,42 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-slate-800">GroundFloor</h1>
           <p className="text-slate-500 text-sm mt-1">Управление коммерческой недвижимостью</p>
         </div>
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="label">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <input type="email" className="input pl-10" placeholder="admin@groundfloor.uz"
-                value={email} onChange={e => setEmail(e.target.value)} required />
-            </div>
+            <input
+              type="email"
+              className="input"
+              placeholder="admin@groundfloor.uz"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
           </div>
           <div>
             <label className="label">Пароль</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <input type="password" className="input pl-10" placeholder="••••••••"
-                value={password} onChange={e => setPassword(e.target.value)} required />
-            </div>
+            <input
+              type="password"
+              className="input"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
           </div>
-          {error && <div className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
-          <button type="submit" className="btn-primary w-full justify-center py-3" disabled={loading}>
+
+          {error && (
+            <div className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</div>
+          )}
+
+          <button
+            type="submit"
+            className="btn-primary w-full justify-center py-3"
+            disabled={loading}
+          >
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
