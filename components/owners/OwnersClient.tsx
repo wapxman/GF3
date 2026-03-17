@@ -8,6 +8,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
   const [shares, setShares] = useState(initialShares);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('owner');
+  const [accessToken, setAccessToken] = useState<string>('');
   const [showShareForm, setShowShareForm] = useState(false);
   const [showOwnerForm, setShowOwnerForm] = useState(false);
   const [editingShare, setEditingShare] = useState<any>(null);
@@ -19,10 +20,11 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentUserId(user.id);
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      setCurrentUserId(session.user.id);
+      setAccessToken(session.access_token);
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
       if (profile) setCurrentUserRole(profile.role);
     };
     init();
@@ -56,7 +58,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
       const res = await fetch('/api/admin/delete-user', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: id }),
+        body: JSON.stringify({ userId: id, accessToken }),
       });
       const result = await res.json();
       if (!res.ok) {
@@ -104,14 +106,8 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
     setShowShareForm(true);
   };
 
-  const visibleOwners = isAdmin
-    ? owners
-    : owners.filter((o: any) => o.id === currentUserId);
-
-  const ownerShares = visibleOwners.map((o: any) => ({
-    ...o,
-    shares: shares.filter((s: any) => s.owner_id === o.id),
-  }));
+  const visibleOwners = isAdmin ? owners : owners.filter((o: any) => o.id === currentUserId);
+  const ownerShares = visibleOwners.map((o: any) => ({ ...o, shares: shares.filter((s: any) => s.owner_id === o.id) }));
 
   return (
     <div className="page-content">

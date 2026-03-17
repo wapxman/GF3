@@ -1,53 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function DELETE(req: NextRequest) {
   try {
-    const cookieStore = cookies();
-
-    // Build supabase server client with cookies (reads session)
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
-            } catch {}
-          },
-        },
-      }
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const { userId, accessToken } = await req.json();
+    if (!userId || !accessToken) {
+      return NextResponse.json({ error: 'userId and accessToken required' }, { status: 400 });
     }
 
-    const { userId } = await req.json();
-    if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
-
-    // Admin client with service role key
+    // Verify the caller via their access token
     const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
+    // Get caller's user from token
+    const { data: { user: caller }, error: callerErr } = await adminClient.auth.getUser(accessToken);
+    if (callerErr || !caller) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check caller is admin
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', caller.id)
+      .single();
+
+    if (profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Delete shares, profile, then auth user
     await adminClient.from('property_shares').delete().eq('owner_id', userId);
     await adminClient.from('profiles').delete().eq('id', userId);
 
