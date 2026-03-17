@@ -1,17 +1,13 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, UserPlus, Pencil, Trash2, X } from 'lucide-react';
 
-export default function OwnersClient({
-  owners: initialOwners,
-  properties,
-  shares: initialShares,
-  currentUserId,
-  currentUserRole,
-}: any) {
+export default function OwnersClient({ owners: initialOwners, properties, shares: initialShares }: any) {
   const [owners, setOwners] = useState(initialOwners);
   const [shares, setShares] = useState(initialShares);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('owner');
   const [showShareForm, setShowShareForm] = useState(false);
   const [showOwnerForm, setShowOwnerForm] = useState(false);
   const [editingShare, setEditingShare] = useState<any>(null);
@@ -20,6 +16,17 @@ export default function OwnersClient({
   const [loading, setLoading] = useState(false);
   const [oError, setOError] = useState('');
   const supabase = createClient();
+
+  useEffect(() => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setCurrentUserId(user.id);
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (profile) setCurrentUserRole(profile.role);
+    };
+    init();
+  }, []);
 
   const isAdmin = currentUserRole === 'admin';
 
@@ -85,7 +92,7 @@ export default function OwnersClient({
     setShowShareForm(true);
   };
 
-  // For owner role — show only their own card
+  // Owner sees only their own card
   const visibleOwners = isAdmin
     ? owners
     : owners.filter((o: any) => o.id === currentUserId);
@@ -103,9 +110,13 @@ export default function OwnersClient({
         </h1>
         {isAdmin && (
           <div className="flex gap-2">
-            <button className="btn-secondary" onClick={() => setShowOwnerForm(true)}><UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">Добавить владельца</span></button>
+            <button className="btn-secondary" onClick={() => setShowOwnerForm(true)}>
+              <UserPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">Добавить владельца</span>
+            </button>
             <button className="btn-primary" onClick={() => { setEditingShare(null); setSForm({ owner_id: '', property_id: '', share_percent: '', valid_from: new Date().toISOString().split('T')[0] }); setShowShareForm(true); }}>
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Добавить долю</span>
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Добавить долю</span>
             </button>
           </div>
         )}
