@@ -18,9 +18,14 @@ export default function ReportsClient() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [properties, setProperties] = useState<any[]>([]);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [shares, setShares] = useState<any[]>([]);
   const [income, setIncome] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterProperty, setFilterProperty] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -29,20 +34,37 @@ export default function ReportsClient() {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      const [{ data: p }, { data: i }, { data: e }] = await Promise.all([
+      const [{ data: p }, { data: i }, { data: e }, { data: ow }, { data: sh }] = await Promise.all([
         supabase.from('properties').select('*, buildings(name)').order('name'),
         supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
         supabase.from('expenses').select('*').eq('is_deleted', false).gte('expense_date', startDate).lte('expense_date', endDate),
+        supabase.from('profiles').select('id, full_name').eq('role', 'owner'),
+        supabase.from('property_shares').select('*').is('valid_to', null),
       ]);
       setProperties(p || []);
       setIncome(i || []);
       setExpenses(e || []);
+      setOwners(ow || []);
+      setShares(sh || []);
       setLoading(false);
     };
     load();
   }, [year, month]);
 
-  const rows = properties.map((p: any) => {
+  const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
+
+  // Apply filters
+  let filteredProps = properties;
+  if (filterOwner) {
+    const ownerPropIds = shares.filter((s: any) => s.owner_id === filterOwner).map((s: any) => s.property_id);
+    filteredProps = filteredProps.filter((p: any) => ownerPropIds.includes(p.id));
+  }
+  if (filterProperty) {
+    filteredProps = filteredProps.filter((p: any) => p.id === filterProperty);
+  }
+
+  const rows = filteredProps.map((p: any) => {
     const propIncome   = income.filter((i: any) => i.property_id === p.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
     const propExpenses = expenses.filter((e: any) => e.property_id === p.id).reduce((s: number, e: any) => s + Number(e.amount), 0);
     const netProfit    = propIncome - propExpenses;
@@ -55,9 +77,6 @@ export default function ReportsClient() {
   const totalExpenses = rows.reduce((s: number, r: any) => s + r.propExpenses, 0);
   const totalProfit   = totalIncome - totalExpenses;
   const totalPlanPct  = totalPlan > 0 ? Math.round((totalIncome / totalPlan) * 100) : null;
-
-  const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
   const exportExcel = async () => {
     const XLSX = (await import('xlsx')).default;
@@ -75,13 +94,12 @@ export default function ReportsClient() {
   return (
     <div className="page-content">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-800">P&amp;L Отчёт</h1>
           <p className="text-slate-400 text-xs mt-0.5">{MONTHS[month - 1]} {year}</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Period switcher */}
           <div className="flex items-center gap-1 bg-slate-100 rounded-xl px-1 py-1">
             <button onClick={prev} className="p-1.5 hover:bg-white rounded-lg transition-colors">
               <ChevronLeft className="w-4 h-4 text-slate-500" />
@@ -98,6 +116,21 @@ export default function ReportsClient() {
             <span className="hidden sm:inline">Excel</span>
           </button>
         </div>
+      </div>
+
+      {/* Filters */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+        <select className="input text-sm" value={filterOwner} onChange={e => { setFilterOwner(e.target.value); setFilterProperty(''); }}>
+          <option value="">Все владельцы</option>
+          {owners.map((o: any) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+        </select>
+        <select className="input text-sm" value={filterProperty} onChange={e => setFilterProperty(e.target.value)}>
+          <option value="">Все объекты</option>
+          {(filterOwner
+            ? properties.filter((p: any) => shares.filter((s: any) => s.owner_id === filterOwner).map((s: any) => s.property_id).includes(p.id))
+            : properties
+          ).map((p: any) => <option key={p.id} value={p.id}>{p.buildings?.name} — {p.name}</option>)}
+        </select>
       </div>
 
       {/* Summary cards */}
@@ -124,7 +157,7 @@ export default function ReportsClient() {
         <div className="text-center text-slate-400 py-12">Загрузка...</div>
       ) : (
         <>
-          {/* Mobile: card list */}
+          {/* Mobile */}
           <div className="md:hidden space-y-2">
             {rows.length === 0 && <p className="text-center text-slate-400 py-8">Нет данных</p>}
             {rows.map((r: any) => (
@@ -138,32 +171,20 @@ export default function ReportsClient() {
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <p className="text-slate-400">План</p>
-                    <p className="font-medium text-slate-600 truncate">{formatCurrency(r.planned_income)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400">Доход</p>
-                    <p className="font-semibold text-green-600 truncate">{formatCurrency(r.propIncome)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400">Прибыль</p>
-                    <p className={`font-bold truncate ${r.netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{formatCurrency(r.netProfit)}</p>
-                  </div>
+                  <div><p className="text-slate-400">План</p><p className="font-medium text-slate-600 truncate">{formatCurrency(r.planned_income)}</p></div>
+                  <div><p className="text-slate-400">Доход</p><p className="font-semibold text-green-600 truncate">{formatCurrency(r.propIncome)}</p></div>
+                  <div><p className="text-slate-400">Прибыль</p><p className={`font-bold truncate ${r.netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{formatCurrency(r.netProfit)}</p></div>
                 </div>
                 {r.planPercent != null && (
                   <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${r.planPercent >= 100 ? 'bg-green-500' : 'bg-blue-400'}`}
-                      style={{ width: `${Math.min(r.planPercent, 100)}%` }}
-                    />
+                    <div className={`h-full rounded-full ${r.planPercent >= 100 ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${Math.min(r.planPercent, 100)}%` }} />
                   </div>
                 )}
               </div>
             ))}
           </div>
 
-          {/* Desktop: table */}
+          {/* Desktop */}
           <div className="hidden md:block card p-0 overflow-hidden">
             <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
               <thead>

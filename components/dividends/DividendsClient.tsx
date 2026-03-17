@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, MONTHS } from '@/lib/utils';
 import { Calculator, CheckCircle, Download } from 'lucide-react';
@@ -30,6 +30,7 @@ export default function DividendsClient() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [profile, setProfile] = useState<any>(null);
   const [properties, setProperties] = useState<any[]>([]);
+  const [buildings, setBuildings] = useState<any[]>([]);
   const [shares, setShares] = useState<any[]>([]);
   const [dividends, setDividends] = useState<any[]>([]);
   const [owners, setOwners] = useState<any[]>([]);
@@ -37,20 +38,27 @@ export default function DividendsClient() {
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState('');
 
+  // Filters (admin only)
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterBuilding, setFilterBuilding] = useState('');
+  const [filterProperty, setFilterProperty] = useState('');
+
   useEffect(() => {
     const load = async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const [{ data: p }, { data: props }, { data: sh }, { data: div }, { data: ow }] = await Promise.all([
+      const [{ data: p }, { data: props }, { data: blds }, { data: sh }, { data: div }, { data: ow }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('properties').select('*, buildings(name)').eq('status', 'active'),
+        supabase.from('buildings').select('*').order('name'),
         supabase.from('property_shares').select('*').is('valid_to', null),
         supabase.from('dividend_calculations').select('*, properties(name, buildings(name))').order('period_year', { ascending: false }).order('period_month', { ascending: false }),
-        supabase.from('profiles').select('id, full_name'),
+        supabase.from('profiles').select('id, full_name').eq('role', 'owner'),
       ]);
       setProfile(p);
       setProperties(props || []);
+      setBuildings(blds || []);
       setShares(sh || []);
       setDividends(div || []);
       setOwners(ow || []);
@@ -69,14 +77,12 @@ export default function DividendsClient() {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
       const [{ data: freshIncome }, { data: freshExpenses }, { data: freshShares }, { data: freshProps }] = await Promise.all([
         supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
         supabase.from('expenses').select('*').eq('is_deleted', false).gte('expense_date', startDate).lte('expense_date', endDate),
         supabase.from('property_shares').select('*').is('valid_to', null),
         supabase.from('properties').select('*').eq('status', 'active'),
       ]);
-
       const toInsert: any[] = [];
       for (const property of (freshProps || [])) {
         const propIncome   = (freshIncome   || []).filter((i: any) => i.property_id === property.id).reduce((s: number, i: any) => s + Number(i.amount), 0);
@@ -93,16 +99,13 @@ export default function DividendsClient() {
           });
         }
       }
-
       if (toInsert.length === 0) {
         setCalcError('Нет данных для расчёта. Проверьте: есть ли активные объекты с долями владельцев?');
         setCalculating(false);
         return;
       }
-
       await supabase.from('dividend_calculations').delete().eq('period_year', year).eq('period_month', month);
       const { data, error } = await supabase.from('dividend_calculations').insert(toInsert).select('*, properties(name, buildings(name))');
-
       if (error) {
         setCalcError('Ошибка: ' + error.message);
       } else {
@@ -121,9 +124,28 @@ export default function DividendsClient() {
   };
 
   const isAdmin = profile?.role === 'admin';
-  const filtered = isAdmin
-    ? dividends.filter((d: any) => d.period_year === year && d.period_month === month)
-    : dividends.filter((d: any) => d.owner_id === profile?.id);
+
+  // Build property list filtered by building (for filter dropdown)
+  const propsForFilter = filterBuilding
+    ? properties.filter((p: any) => p.building_id === filterBuilding)
+    : properties;
+
+  const filtered = useMemo(() => {
+    let list = isAdmin
+      ? dividends.filter((d: any) => d.period_year === year && d.period_month === month)
+      : dividends.filter((d: any) => d.owner_id === profile?.id);
+
+    if (isAdmin) {
+      if (filterOwner) list = list.filter((d: any) => d.owner_id === filterOwner);
+      if (filterBuilding) {
+        const bldPropIds = properties.filter((p: any) => p.building_id === filterBuilding).map((p: any) => p.id);
+        list = list.filter((d: any) => bldPropIds.includes(d.property_id));
+      }
+      if (filterProperty) list = list.filter((d: any) => d.property_id === filterProperty);
+    }
+    return list;
+  }, [dividends, year, month, isAdmin, profile, filterOwner, filterBuilding, filterProperty, properties]);
+
   const totalDividends = filtered.reduce((s: number, d: any) => s + Number(d.dividend_amount), 0);
 
   const exportExcel = async () => {
@@ -151,14 +173,14 @@ export default function DividendsClient() {
   const C = isAdmin ? COL_ADMIN : COL_OWNER;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="page-content">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Дивиденды</h1>
-          <p className="text-slate-500">Сумма: <span className="font-bold text-blue-600">{formatCurrency(totalDividends)}</span></p>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">Дивиденды</h1>
+          <p className="text-slate-500 text-sm">Сумма: <span className="font-bold text-blue-600">{formatCurrency(totalDividends)}</span></p>
         </div>
         {isAdmin && (
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <select className="input w-auto" value={month} onChange={e => setMonth(Number(e.target.value))}>
               {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
             </select>
@@ -166,16 +188,71 @@ export default function DividendsClient() {
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <button className="btn-primary" onClick={calculate} disabled={calculating}>
-              <Calculator className="w-4 h-4" />{calculating ? 'Расчёт...' : 'Рассчитать дивиденды'}
+              <Calculator className="w-4 h-4" />{calculating ? 'Расчёт...' : 'Рассчитать'}
             </button>
             <button className="btn-secondary" onClick={exportExcel}><Download className="w-4 h-4" /> Excel</button>
           </div>
         )}
       </div>
 
-      {calcError && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-6 text-sm">{calcError}</div>}
+      {/* Filters (admin) */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+          <select className="input text-sm" value={filterOwner} onChange={e => setFilterOwner(e.target.value)}>
+            <option value="">Все владельцы</option>
+            {owners.map((o: any) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+          </select>
+          <select className="input text-sm" value={filterBuilding} onChange={e => { setFilterBuilding(e.target.value); setFilterProperty(''); }}>
+            <option value="">Все здания</option>
+            {buildings.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select className="input text-sm" value={filterProperty} onChange={e => setFilterProperty(e.target.value)}>
+            <option value="">Все объекты</option>
+            {propsForFilter.map((p: any) => <option key={p.id} value={p.id}>{p.buildings?.name} — {p.name}</option>)}
+          </select>
+        </div>
+      )}
 
-      <div className="card p-0 overflow-hidden">
+      {calcError && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-4 text-sm">{calcError}</div>}
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 && (
+          <p className="text-center text-slate-400 py-8">
+            {isAdmin ? 'Нажмите «Рассчитать» для выбранного периода' : 'Нет данных'}
+          </p>
+        )}
+        {filtered.map((d: any) => (
+          <div key={d.id} className="card">
+            {isAdmin && <p className="text-xs font-semibold text-blue-600 mb-1">{getOwnerName(d.owner_id)}</p>}
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-800 truncate" style={{ maxWidth: 200 }}>
+                  {d.properties?.buildings?.name} — {d.properties?.name}
+                </p>
+                <p className="text-xs text-slate-400">{MONTHS[d.period_month - 1]} {d.period_year}</p>
+              </div>
+              <div className="text-right ml-3">
+                <p className="text-sm font-bold text-blue-600">{formatCurrency(d.dividend_amount)}</p>
+                <p className="text-xs text-slate-400">{d.share_percent}% от {formatCurrency(d.net_profit)}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              {d.is_paid
+                ? <span className="badge-success">Выплачено</span>
+                : <span className="badge-warning">Ожидает</span>}
+              {isAdmin && !d.is_paid && (
+                <button onClick={() => markPaid(d.id)} className="btn-secondary py-1 px-2 text-xs">
+                  <CheckCircle className="w-3 h-3" /> Выплатить
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block card p-0 overflow-hidden">
         <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
           <thead>
             <tr className="bg-slate-50">
@@ -193,7 +270,7 @@ export default function DividendsClient() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={isAdmin ? 8 : 6} className="table-cell text-center text-slate-400 py-8">
-                  {isAdmin ? 'Нажмите «Рассчитать дивиденды» для выбранного периода' : 'Нет данных'}
+                  {isAdmin ? 'Нажмите «Рассчитать» для выбранного периода' : 'Нет данных'}
                 </td>
               </tr>
             )}

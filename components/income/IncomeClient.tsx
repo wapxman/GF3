@@ -1,8 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import { formatCurrency, formatDate, MONTHS } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
 export default function IncomeClient({ properties, income: initialIncome }: { properties: any[], income: any[] }) {
   const [income, setIncome] = useState(initialIncome);
@@ -10,6 +10,10 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ property_id: '', amount: '', income_date: '', comment: '' });
   const [loading, setLoading] = useState(false);
+
+  // Filters
+  const [filterProperty, setFilterProperty] = useState('');
+
   const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,20 +44,33 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
     setIncome(income.filter(i => i.id !== id));
   };
 
-  const total = income.reduce((s, i) => s + Number(i.amount), 0);
+  const filtered = useMemo(() => {
+    let list = income;
+    if (filterProperty) list = list.filter(i => i.property_id === filterProperty);
+    return list;
+  }, [income, filterProperty]);
+
+  const total = filtered.reduce((s, i) => s + Number(i.amount), 0);
 
   return (
     <div className="page-content">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-800">Доходы</h1>
-          <p className="text-slate-500 text-sm">Итого: <span className="font-semibold text-green-600">{formatCurrency(total)}</span></p>
         </div>
         <button className="btn-primary" onClick={() => { setShowForm(true); setEditing(null); setForm({ property_id: '', amount: '', income_date: '', comment: '' }); }}>
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Добавить доход</span>
           <span className="sm:hidden">Добавить</span>
         </button>
+      </div>
+
+      {/* Filter */}
+      <div className="mb-4">
+        <select className="input text-sm" value={filterProperty} onChange={e => setFilterProperty(e.target.value)}>
+          <option value="">Все объекты</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.buildings?.name} — {p.name}</option>)}
+        </select>
       </div>
 
       {showForm && (
@@ -89,10 +106,10 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
         </div>
       )}
 
-      {/* Mobile: card list */}
+      {/* Mobile */}
       <div className="md:hidden space-y-3">
-        {income.length === 0 && <p className="text-center text-slate-400 py-8">Нет записей</p>}
-        {income.map(item => (
+        {filtered.length === 0 && <p className="text-center text-slate-400 py-8">Нет записей</p>}
+        {filtered.map(item => (
           <div key={item.id} className="card flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-800">{item.properties?.buildings?.name} — {item.properties?.name}</p>
@@ -108,9 +125,15 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
             </div>
           </div>
         ))}
+        {filtered.length > 0 && (
+          <div className="card flex items-center justify-between bg-slate-50">
+            <span className="text-sm font-semibold text-slate-700">Итого</span>
+            <span className="text-sm font-bold text-green-600">{formatCurrency(total)}</span>
+          </div>
+        )}
       </div>
 
-      {/* Desktop: table */}
+      {/* Desktop */}
       <div className="hidden md:block card p-0 overflow-hidden">
         <table className="w-full">
           <thead><tr>
@@ -121,7 +144,7 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
             <th className="table-header"></th>
           </tr></thead>
           <tbody>
-            {income.map(item => (
+            {filtered.map(item => (
               <tr key={item.id} className="hover:bg-slate-50">
                 <td className="table-cell">{formatDate(item.income_date)}</td>
                 <td className="table-cell">{item.properties?.buildings?.name} — {item.properties?.name}</td>
@@ -135,7 +158,14 @@ export default function IncomeClient({ properties, income: initialIncome }: { pr
                 </td>
               </tr>
             ))}
-            {income.length === 0 && <tr><td colSpan={5} className="table-cell text-center text-slate-400 py-8">Нет записей</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={5} className="table-cell text-center text-slate-400 py-8">Нет записей</td></tr>}
+            {filtered.length > 0 && (
+              <tr className="bg-slate-50 font-bold">
+                <td className="table-cell" colSpan={2}><span className="text-slate-600">Итого</span></td>
+                <td className="table-cell text-green-600">{formatCurrency(total)}</td>
+                <td className="table-cell" colSpan={2}></td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

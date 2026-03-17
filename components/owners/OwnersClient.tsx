@@ -3,7 +3,13 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, UserPlus, Pencil, Trash2, X } from 'lucide-react';
 
-export default function OwnersClient({ owners: initialOwners, properties, shares: initialShares }: any) {
+export default function OwnersClient({
+  owners: initialOwners,
+  properties,
+  shares: initialShares,
+  currentUserId,
+  currentUserRole,
+}: any) {
   const [owners, setOwners] = useState(initialOwners);
   const [shares, setShares] = useState(initialShares);
   const [showShareForm, setShowShareForm] = useState(false);
@@ -14,6 +20,8 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
   const [loading, setLoading] = useState(false);
   const [oError, setOError] = useState('');
   const supabase = createClient();
+
+  const isAdmin = currentUserRole === 'admin';
 
   const handleAddOwner = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,21 +85,33 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
     setShowShareForm(true);
   };
 
-  const ownerShares = owners.map((o: any) => ({ ...o, shares: shares.filter((s: any) => s.owner_id === o.id) }));
+  // For owner role — show only their own card
+  const visibleOwners = isAdmin
+    ? owners
+    : owners.filter((o: any) => o.id === currentUserId);
+
+  const ownerShares = visibleOwners.map((o: any) => ({
+    ...o,
+    shares: shares.filter((s: any) => s.owner_id === o.id),
+  }));
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-slate-800">Владельцы и доли</h1>
-        <div className="flex gap-3">
-          <button className="btn-secondary" onClick={() => setShowOwnerForm(true)}><UserPlus className="w-4 h-4" /> Добавить владельца</button>
-          <button className="btn-primary" onClick={() => { setEditingShare(null); setSForm({ owner_id: '', property_id: '', share_percent: '', valid_from: new Date().toISOString().split('T')[0] }); setShowShareForm(true); }}>
-            <Plus className="w-4 h-4" /> Добавить долю
-          </button>
-        </div>
+    <div className="page-content">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl md:text-2xl font-bold text-slate-800">
+          {isAdmin ? 'Владельцы и доли' : 'Мои объекты'}
+        </h1>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => setShowOwnerForm(true)}><UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">Добавить владельца</span></button>
+            <button className="btn-primary" onClick={() => { setEditingShare(null); setSForm({ owner_id: '', property_id: '', share_percent: '', valid_from: new Date().toISOString().split('T')[0] }); setShowShareForm(true); }}>
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Добавить долю</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {showOwnerForm && (
+      {isAdmin && showOwnerForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold mb-4">Новый владелец</h2>
@@ -110,7 +130,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
         </div>
       )}
 
-      {showShareForm && (
+      {isAdmin && showShareForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold mb-4">{editingShare ? 'Редактировать долю' : 'Назначить долю'}</h2>
@@ -152,7 +172,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
       )}
 
       <div className="space-y-4">
-        {ownerShares.length === 0 && <p className="text-slate-400 text-center py-12">Добавьте первого владельца</p>}
+        {ownerShares.length === 0 && <p className="text-slate-400 text-center py-12">Нет данных</p>}
         {ownerShares.map((o: any) => (
           <div key={o.id} className="card">
             <div className="flex items-center justify-between mb-4">
@@ -165,7 +185,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
                   <p className="text-sm text-slate-400">{o.role === 'admin' ? 'Администратор' : 'Владелец'}</p>
                 </div>
               </div>
-              {o.role !== 'admin' && (
+              {isAdmin && o.role !== 'admin' && (
                 <button onClick={() => handleDeleteOwner(o.id)} className="p-2 hover:text-red-600 hover:bg-red-50 rounded-lg text-slate-400">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -178,8 +198,12 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
                     <span className="text-sm text-slate-700">{s.properties?.buildings?.name} — {s.properties?.name}</span>
                     <div className="flex items-center gap-2">
                       <span className="badge-success">{s.share_percent}%</span>
-                      <button onClick={() => openEditShare(s)} className="p-1 hover:text-blue-600 text-slate-400"><Pencil className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDeleteShare(s.id)} className="p-1 hover:text-red-600 text-slate-400"><X className="w-3.5 h-3.5" /></button>
+                      {isAdmin && (
+                        <>
+                          <button onClick={() => openEditShare(s)} className="p-1 hover:text-blue-600 text-slate-400"><Pencil className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleDeleteShare(s.id)} className="p-1 hover:text-red-600 text-slate-400"><X className="w-3.5 h-3.5" /></button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

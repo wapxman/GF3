@@ -12,6 +12,13 @@ export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // filter state
+  const [filterBuilding, setFilterBuilding] = useState('');
+  const [filterProperty, setFilterProperty] = useState('');
+  const [filterOwner, setFilterOwner] = useState('');
+  const [owners, setOwners] = useState<any[]>([]);
+  const [shares, setShares] = useState<any[]>([]);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -19,13 +26,24 @@ export default function DashboardPage() {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      const [{ data: buildings }, { data: properties }, { data: income }, { data: expenses }] = await Promise.all([
+      const [
+        { data: buildings },
+        { data: properties },
+        { data: income },
+        { data: expenses },
+        { data: ownersData },
+        { data: sharesData },
+      ] = await Promise.all([
         supabase.from('buildings').select('*').order('name'),
         supabase.from('properties').select('*, buildings(name)').eq('status', 'active').order('name'),
         supabase.from('income').select('*').eq('is_deleted', false).gte('income_date', startDate).lte('income_date', endDate),
         supabase.from('expenses').select('*').eq('is_deleted', false).gte('expense_date', startDate).lte('expense_date', endDate),
+        supabase.from('profiles').select('id, full_name').eq('role', 'owner'),
+        supabase.from('property_shares').select('*').is('valid_to', null),
       ]);
       setData({ buildings: buildings || [], properties: properties || [], income: income || [], expenses: expenses || [] });
+      setOwners(ownersData || []);
+      setShares(sharesData || []);
       setLoading(false);
     };
     load();
@@ -36,33 +54,52 @@ export default function DashboardPage() {
 
   if (!data) return <div className="page-content text-slate-400">Загрузка...</div>;
 
-  const { buildings, properties, income, expenses } = data;
-  const totalIncome   = income.reduce((s: number, i: any) => s + Number(i.amount), 0);
-  const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
+  const { buildings, income, expenses } = data;
+
+  // Filter properties by building
+  let properties = data.properties;
+  if (filterBuilding) properties = properties.filter((p: any) => p.building_id === filterBuilding);
+  if (filterOwner) {
+    const ownerPropIds = shares.filter((s: any) => s.owner_id === filterOwner).map((s: any) => s.property_id);
+    properties = properties.filter((p: any) => ownerPropIds.includes(p.id));
+  }
+  if (filterProperty) properties = properties.filter((p: any) => p.id === filterProperty);
+
+  // Filter income/expenses to matching properties
+  const propIds = properties.map((p: any) => p.id);
+  const filteredIncome = income.filter((i: any) => propIds.includes(i.property_id));
+  const filteredExpenses = expenses.filter((e: any) => propIds.includes(e.property_id));
+
+  const totalIncome   = filteredIncome.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  const totalExpenses = filteredExpenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
   const netProfit     = totalIncome - totalExpenses;
   const totalPlan     = properties.reduce((s: number, p: any) => s + Number(p.planned_income), 0);
   const planPercent   = totalPlan > 0 ? Math.round((totalIncome / totalPlan) * 100) : 0;
 
   const propertyStats = properties.map((p: any) => ({
     name: p.name,
-    income:   income.filter((i: any)   => i.property_id === p.id).reduce((s: number, i: any) => s + Number(i.amount), 0),
-    expenses: expenses.filter((e: any) => e.property_id === p.id).reduce((s: number, e: any) => s + Number(e.amount), 0),
+    income:   filteredIncome.filter((i: any) => i.property_id === p.id).reduce((s: number, i: any) => s + Number(i.amount), 0),
+    expenses: filteredExpenses.filter((e: any) => e.property_id === p.id).reduce((s: number, e: any) => s + Number(e.amount), 0),
     plan: Number(p.planned_income),
   })).map((p: any) => ({ ...p, profit: p.income - p.expenses }));
+
+  // Properties filtered by selected building (for property dropdown)
+  const propsForDropdown = filterBuilding
+    ? data.properties.filter((p: any) => p.building_id === filterBuilding)
+    : data.properties;
 
   return (
     <div className="page-content">
 
       {/* === HEADER === */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-800">Дашборд</h1>
           <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
             <Building2 className="w-3 h-3" />
-            <span>{buildings.length} зд. · {properties.length} объ.</span>
+            <span>{buildings.length} зд. · {data.properties.length} объ.</span>
           </div>
         </div>
-        {/* Period switcher */}
         <div className="flex items-center gap-1 bg-slate-100 rounded-xl px-1 py-1">
           <button onClick={prev} className="p-1.5 hover:bg-white rounded-lg transition-colors">
             <ChevronLeft className="w-4 h-4 text-slate-500" />
@@ -76,7 +113,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* === HERO: Чистая прибыль === */}
+      {/* === FILTERS === */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+        <select className="input text-sm" value={filterBuilding} onChange={e => { setFilterBuilding(e.target.value); setFilterProperty(''); }}>
+          <option value="">Все здания</option>
+          {buildings.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+        <select className="input text-sm" value={filterProperty} onChange={e => setFilterProperty(e.target.value)}>
+          <option value="">Все объекты</option>
+          {propsForDropdown.map((p: any) => <option key={p.id} value={p.id}>{p.buildings?.name} — {p.name}</option>)}
+        </select>
+        <select className="input text-sm" value={filterOwner} onChange={e => { setFilterOwner(e.target.value); setFilterProperty(''); }}>
+          <option value="">Все владельцы</option>
+          {owners.map((o: any) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+        </select>
+      </div>
+
+      {/* === HERO === */}
       <div className="card mb-3">
         <p className="text-xs text-slate-400 mb-1">Чистая прибыль</p>
         <p className={`text-2xl md:text-3xl font-bold tracking-tight ${
@@ -100,7 +153,7 @@ export default function DashboardPage() {
         <p className="text-xs text-slate-400 mt-1">Выполнение плана</p>
       </div>
 
-      {/* === 2 карточки: Доходы / Расходы === */}
+      {/* === 2 карточки === */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="card">
           <div className="flex items-center gap-1.5 mb-2">
