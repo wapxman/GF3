@@ -51,11 +51,23 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
   };
 
   const handleDeleteOwner = async (id: string) => {
-    if (!confirm('Удалить владельца? Все его доли также будут удалены.')) return;
-    await supabase.from('property_shares').delete().eq('owner_id', id);
-    await supabase.from('profiles').delete().eq('id', id);
-    setOwners(owners.filter((o: any) => o.id !== id));
-    setShares(shares.filter((s: any) => s.owner_id !== id));
+    if (!confirm('Удалить владельца вместе со всеми его долями?')) return;
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert('Ошибка: ' + result.error);
+        return;
+      }
+      setOwners(owners.filter((o: any) => o.id !== id));
+      setShares(shares.filter((s: any) => s.owner_id !== id));
+    } catch (err: any) {
+      alert('Ошибка: ' + err.message);
+    }
   };
 
   const handleAddShare = async (e: React.FormEvent) => {
@@ -92,7 +104,6 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
     setShowShareForm(true);
   };
 
-  // Owner sees only their own card
   const visibleOwners = isAdmin
     ? owners
     : owners.filter((o: any) => o.id === currentUserId);
@@ -188,7 +199,7 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
           <div key={o.id} className="card">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold text-sm">
                   {o.full_name?.charAt(0)}
                 </div>
                 <div>
@@ -197,7 +208,11 @@ export default function OwnersClient({ owners: initialOwners, properties, shares
                 </div>
               </div>
               {isAdmin && o.role !== 'admin' && (
-                <button onClick={() => handleDeleteOwner(o.id)} className="p-2 hover:text-red-600 hover:bg-red-50 rounded-lg text-slate-400">
+                <button
+                  onClick={() => handleDeleteOwner(o.id)}
+                  className="p-2 hover:text-red-600 hover:bg-red-50 rounded-lg text-slate-400 transition-colors"
+                  title="Удалить владельца"
+                >
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
