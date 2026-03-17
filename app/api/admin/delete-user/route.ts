@@ -8,14 +8,13 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'userId and accessToken required' }, { status: 400 });
     }
 
-    // Verify the caller via their access token
     const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Get caller's user from token
+    // Verify caller via access token
     const { data: { user: caller }, error: callerErr } = await adminClient.auth.getUser(accessToken);
     if (callerErr || !caller) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,7 +31,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Delete shares, profile, then auth user
+    // Delete in correct order respecting FK constraints
+    await adminClient.from('dividend_calculations').delete().eq('owner_id', userId);
     await adminClient.from('property_shares').delete().eq('owner_id', userId);
     await adminClient.from('profiles').delete().eq('id', userId);
 
